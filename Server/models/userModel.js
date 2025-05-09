@@ -1,14 +1,7 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-    first_name: {
-        type: String,
-        required: true
-    },
-    last_name: {
-        type: String,
-        required: true
-    },
+    
     email: {
         type: String,
         required: true
@@ -17,11 +10,7 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    phone: {
-        type: String,
-        required: true
-    },
-    address: {
+    username: {
         type: String,
         required: true
     },
@@ -36,7 +25,32 @@ const userSchema = new mongoose.Schema({
     }, 
     branch: {
         type: String,
-        required: true
+        required: false
+    },
+    role: {
+        type: String,
+        required: true,
+        default: 'user'
+    },
+    failedLoginAttempts: { 
+        type: Number, 
+        default: 0 
+    },
+    lockedUntil: { 
+        type: Date, 
+        default: null 
+    },
+    lastActivity: { 
+        type: Date, 
+        default: Date.now 
+    }, 
+    mfaSecret: {
+        type: String,
+        default: null, // Store the user's MFA secret
+    },
+    mfaEnabled: {
+        type: Boolean,
+        default: false, // Indicates if MFA is enabled
     },
 
 },{ versionKey: false });

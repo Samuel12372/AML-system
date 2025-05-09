@@ -11,9 +11,21 @@ const branch = require("./routes/branch");
 const users = require("./routes/users");
 const insertBooks = require("./routes/insertBooks");
 const cors = require('cors');
+require('dotenv').config();
+const rateLimit = require('express-rate-limit');
+
+// Limit to 100 requests per 15 minutes per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,   // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false,    // Disable `X-RateLimit-*` headers
+});
 
 
 const app = express();
+app.use(apiLimiter);
 
 const PORT = process.env.PORT;  
 

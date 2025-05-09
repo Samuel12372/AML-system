@@ -1,6 +1,14 @@
 
 const UserModel = require('../models/userModel');
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const speakeasy = require('speakeasy');
+const qrcode = require('qrcode');
+
+const MAX_FAILED_ATTEMPTS = 5;  // Maximum allowed failed login attempts
+const LOCK_TIME = 15 * 60 * 1000;  
+
 
 module.exports = {
 
@@ -142,5 +150,174 @@ module.exports = {
         }
 
     },
+    loginUser: async (req, res) => {
+        try {
+            const { username, password } = req.body;
+            console.log("📥 Received Login Data:", req.body);
+    
+            const user = await UserModel.findOne({ username });
+    
+            if (!user) {
+                return res.status(400).json({ message: "❌ User not found!" });
+            }
+    
+            // Check if account is locked
+            if (user.lockedUntil && user.lockedUntil > Date.now()) {
+                return res.status(403).json({
+                    message: `❌ Account locked. Try again after ${new Date(user.lockedUntil).toLocaleString()}.`
+                });
+            }
+    
+            // Check password
+            const isMatch = await bcrypt.compare(password, user.password);
+
+            if (!isMatch) {
+                user.failedLoginAttempts += 1;
+    
+                if (user.failedLoginAttempts >= 5) {
+                    user.lockedUntil = Date.now() + 15 * 60 * 1000; // 15 minutes lock
+                    await user.save();
+                    return res.status(403).json({ message: "❌ Too many failed attempts. Account locked for 15 minutes." });
+                }
+    
+                await user.save();
+                return res.status(400).json({ message: "❌ Invalid credentials!" });
+            }
+    
+            // Reset login attempts and lock
+            user.failedLoginAttempts = 0;
+            user.lockedUntil = null;
+            user.lastActivity = Date.now();
+            await user.save();
+
+            if (user.mfaSecret) {
+                // Require MFA verification before full login
+                return res.status(200).json({
+                    mfaRequired: true,
+                    userId: user._id,
+                    tempToken: 'abc123', // optional, e.g. short-lived session token
+                    message: 'MFA required',
+                });
+            }
+    
+            // Create JWT with 1 hour expiry
+            const token = jwt.sign(
+                { id: user._id, role: user.role },
+                process.env.JWT_SECRET,
+                { expiresIn: '1h' },
+            );
+    
+            return res.status(200).json({
+                message: "✅ Login successful!",
+                token,
+                userId: user._id,
+                role: user.role
+            });
+    
+        } catch (error) {
+            console.error("❌ Server Error in loginUser:", error);
+            return res.status(500).json({ message: "❌ Server error", error });
+        }
+    },
+    registerUser: async (req, res) => {
+        try {
+            console.log("📥 Received Registration Data:", req.body);
+    
+            const { username, email, password } = req.body;
+    
+            if (!username || !email || !password) {
+                return res.status(400).json({ message: "❌ All fields are required!" });
+            }
+    
+            let userExists = await UserModel.findOne({ email });
+            if (userExists) {
+                console.log("⚠️ User already exists:", email);
+                return res.status(400).json({ message: "❌ Email already in use!" });
+            }
+    
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            const newUser = new UserModel({ username, email, password: hashedPassword, branch: "BranchSheffield", role: "user" });
+    
+            await newUser.save();
+            console.log("✅ User saved successfully:", newUser);
+    
+            res.status(201).json({ message: "✅ Registration successful!", user: newUser });
+        } catch (error) {
+            console.error("❌ Registration error:", error);
+            res.status(500).json({ message: "❌ Server error", error });
+        }
+    },
+    deleteUser: async (req, res) => {
+        try {
+            const { id } = req.params;  // Get the userId from URL parameter
+            console.log("📥 Deleting User with ID:", id);
+    
+            const deletedUser = await UserModel.findByIdAndDelete(id);
+            if (!deletedUser) {
+                return res.status(404).json({ message: "❌ User not found!" });
+            }
+    
+            console.log("✅ User deleted successfully:", deletedUser);
+            res.status(200).json({ message: "✅ User deleted successfully!", user: deletedUser });
+        } catch (error) {
+            console.error("❌ Error deleting user:", error);
+            res.status(500).json({ message: "❌ Server error", error });
+        }
+    },
+    generateMfaSecret: async (req, res) => {
+        try {
+            const userId = req.params.id;
+            const user = await UserModel.findById(userId);
+        
+            if (!user) {
+              return res.status(404).json({ message: 'User not found' });
+            }
+        
+            // Generate MFA secret
+            const secret = speakeasy.generateSecret({
+              name: `AML-System (${user.email})`,
+            });
+        
+            // Save the secret to the user's record
+            user.mfaSecret = secret.base32;
+            await user.save();
+        
+            // Generate QR code for the secret
+            const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url);
+        
+            res.json({ qrCodeUrl, secret: secret.base32 });
+          } catch (error) {
+            console.error('Error generating MFA secret:', error);
+            res.status(500).json({ message: 'Error generating MFA secret' });
+        } 
+    },
+    verifyMfaCode: async (req, res) => {
+        try {
+            const { id, token } = req.body;
+            const user = await UserModel.findById(id);
+        
+            if (!user || !user.mfaSecret) {
+              return res.status(404).json({ message: 'User not found or MFA not set up' });
+            }
+        
+            // Verify the TOTP token
+            const isVerified = speakeasy.totp.verify({
+              secret: user.mfaSecret,
+              encoding: 'base32',
+              token,
+            });
+        
+            if (isVerified) {
+              res.json({ message: 'MFA verified successfully' });
+            } else {
+              res.status(400).json({ message: 'Invalid MFA token' });
+            }
+        } catch (error) {
+            console.error('Error verifying MFA code:', error);
+            res.status(500).json({ message: 'Error verifying MFA code' });
+        }
+    },
+    
 };
 

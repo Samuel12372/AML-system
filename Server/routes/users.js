@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 
 const userControllers = require('../controllers/userController');
+const isAuthenticated = require('../middleware/auth');  // Importing the authentication middleware
+
+router.post('/user/login', userControllers.loginUser);
+//register user
+router.post('/user/register', userControllers.registerUser);
  
 // Get all users
 router.get('/users', userControllers.getAllUsers);
@@ -21,5 +26,12 @@ router.post('/add-reserved-book/:id', userControllers.addReservedBook);
 router.delete('/user-books-reserved/:id/:books_reserved', userControllers.deleteUserReservedBook);
 // update due date of borrowed book
 router.patch('/update-due-date/:id/:book_id', userControllers.updateDueDate);
+//login user
+//delete user
+router.delete('/user/delete/:id', userControllers.deleteUser);
+
+
+router.post('/user/mfa/generate/:id', userControllers.generateMfaSecret);
+router.post('/user/mfa/verify', userControllers.verifyMfaCode);
 
 module.exports = router;

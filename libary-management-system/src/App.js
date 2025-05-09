@@ -7,6 +7,7 @@ import Navbar from './Components/Navbar';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { UserProvider } from './Context/UserContext';
 import { SearchProvider } from './Context/SearchContext';
+import ProtectedRoute from './Components/ProtectedRoute'; // Import the ProtectedRoute component
 
 //Pages
 import Homepage from "./Pages/Homepage";
@@ -25,7 +26,14 @@ function App() {
         <Route path="/" element={<Homepage />} />
         <Route path="/browse-media" element={<BrowseMedia />} />
         <Route path="/manage-media" element={<ManageMedia />} />
-        <Route path="/manage-inventory" element={<ManageInventory />} />
+        <Route
+          path="/manage-inventory"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <ManageInventory />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Router>
     </UserProvider>

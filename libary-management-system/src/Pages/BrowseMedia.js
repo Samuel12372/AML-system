@@ -34,6 +34,7 @@ function BrowseMedia() {
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = filteredBooks.slice(indexOfFirstItem, indexOfLastItem);
+  
 
   const handlePageChange = (event, value) => {
     setCurrentPage(value);
